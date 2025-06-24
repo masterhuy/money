@@ -210,7 +210,7 @@
             let result = `<h5 class="mb-3">Chi tiết từng khoản</h5>`;
             expenses.forEach(e => {
                 const share = Math.round(e.amount / e.sharedWith.length);
-                result += `<p><strong>${e.title}</strong>: ${e.payer} chi ${e.amount.toLocaleString()} VND, mỗi người trả ${share.toLocaleString()} VND</p>`;
+                result += `<p><strong>${e.title}</strong>: ${e.payer} chi ${e.amount.toLocaleString()} VND cho ${e.sharedWith.length} người (${e.sharedWith.join(', ')}), mỗi người trả ${share.toLocaleString()} VND</p>`;
             });
 
             result += `<h5 class="mt-4">Tổng kết</h5><table class="table table-bordered mt-2">
