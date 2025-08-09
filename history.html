@@ -14,6 +14,13 @@
     <div class="container py-4">
         <a href="index.html" class="btn btn-outline-secondary mb-3">🔙 Quay lại trang tính tiền</a>
         <h2 class="mb-4">🕘 Lịch sử tính tiền</h2>
+
+        <!-- Bộ lọc tháng/năm -->
+        <div class="mb-4">
+            <label for="filterMonth" class="form-label">📅 Lọc theo tháng/năm:</label>
+            <input type="month" id="filterMonth" class="form-control" style="max-width: 250px;">
+        </div>
+
         <div id="historyList"></div>
     </div>
 
@@ -30,25 +37,61 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        db.collection("chiaTienResults").orderBy("timestamp", "desc").get().then(snapshot => {
-            if (snapshot.empty) {
-                $('#historyList').html('<p>Chưa có dữ liệu nào.</p>');
+        // Hàm xử lý mọi kiểu timestamp
+        function getDateFromTimestamp(ts) {
+            if (!ts) return null;
+            if (typeof ts.toDate === 'function') return ts.toDate(); // Firestore Timestamp
+            if (typeof ts === 'number') return new Date(ts);         // milliseconds
+            if (typeof ts === 'string') return new Date(ts);         // ISO string
+            return null;
+        }
+
+        // Hàm hiển thị dữ liệu
+        function renderHistory(snapshot, monthFilter) {
+            $('#historyList').empty();
+
+            const docs = snapshot.docs.filter(doc => {
+                if (!monthFilter) return true;
+                const data = doc.data();
+                const dateObj = getDateFromTimestamp(data.timestamp);
+                if (!dateObj) return false;
+                const docMonth = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+                return docMonth === monthFilter;
+            });
+
+            if (docs.length === 0) {
+                $('#historyList').html('<p>Không có dữ liệu cho tháng này.</p>');
                 return;
             }
 
-            snapshot.forEach(doc => {
+            docs.forEach(doc => {
                 const data = doc.data();
-                const date = new Date(data.timestamp).toLocaleString("vi-VN");
+                const dateObj = getDateFromTimestamp(data.timestamp);
+                const dateStr = dateObj ? dateObj.toLocaleString("vi-VN") : "Không rõ thời gian";
+
                 $('#historyList').append(`
                     <div class="card mb-4">
-                        <div class="card-header">🗓️ ${date}</div>
-                        <div class="card-body">${data.summaryHTML}</div>
+                        <div class="card-header">🗓️ ${dateStr}</div>
+                        <div class="card-body">${data.summaryHTML || ''}</div>
                     </div>
                 `);
             });
-        }).catch(err => {
-            console.error(err);
-            $('#historyList').html('<p class="text-danger">Lỗi khi tải dữ liệu.</p>');
+        }
+
+        // Lấy dữ liệu realtime
+        let latestSnapshot = null;
+        db.collection("chiaTienResults")
+            .orderBy("timestamp", "desc")
+            .onSnapshot(snapshot => {
+                latestSnapshot = snapshot;
+                renderHistory(snapshot, $('#filterMonth').val());
+            });
+
+        // Lắng nghe thay đổi bộ lọc
+        $('#filterMonth').on('change', function() {
+            if (latestSnapshot) {
+                renderHistory(latestSnapshot, $(this).val());
+            }
         });
     </script>
 </body>
