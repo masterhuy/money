@@ -101,8 +101,80 @@
             checkboxes.prop('checked', !allChecked);
             $(this).text(allChecked ? 'Chọn tất cả' : 'Bỏ chọn tất cả');
         });
+        const defaultPeople = ["Đức", "Huy", "Dân", "Tú", "Châm", "Văn"];
+        const peopleDocRef = db.collection("appState").doc("people");
         let people = [];
         let expenses = [];
+        const windows1252ByteMap = {
+            '€': 0x80, '‚': 0x82, 'ƒ': 0x83, '„': 0x84, '…': 0x85,
+            '†': 0x86, '‡': 0x87, 'ˆ': 0x88, '‰': 0x89, 'Š': 0x8a,
+            '‹': 0x8b, 'Œ': 0x8c, 'Ž': 0x8e, '‘': 0x91, '’': 0x92,
+            '“': 0x93, '”': 0x94, '•': 0x95, '–': 0x96, '—': 0x97,
+            '˜': 0x98, '™': 0x99, 'š': 0x9a, '›': 0x9b, 'œ': 0x9c,
+            'ž': 0x9e, 'Ÿ': 0x9f
+        };
+
+        function hasMojibakeMarker(text) {
+            return /[\u00c3\u00c4\u00c2\u00c6\u00e1\u00e0\u00e2\u00f0]/.test(text);
+        }
+
+        function fixMojibakeText(text) {
+            if (typeof text !== 'string' || !hasMojibakeMarker(text)) {
+                return text;
+            }
+
+            try {
+                const bytes = Uint8Array.from([...text].map(char => {
+                    if (windows1252ByteMap[char]) {
+                        return windows1252ByteMap[char];
+                    }
+
+                    const charCode = char.charCodeAt(0);
+                    if (charCode <= 0xff) {
+                        return charCode;
+                    }
+
+                    throw new Error('Unsupported mojibake character.');
+                }));
+                const decodedText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+                return decodedText.includes('�') ? text : decodedText;
+            } catch (error) {
+                return text;
+            }
+        }
+
+        function normalizePeopleNames(personList) {
+            return personList.map(fixMojibakeText);
+        }
+
+        function savePeople() {
+            return peopleDocRef.set({
+                people: people,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true })
+            .catch((error) => {
+                console.error("Error saving people:", error);
+                alert("Không thể lưu danh sách bro lên Firestore. Vui lòng thử lại.");
+            });
+        }
+
+        function loadPeople() {
+            peopleDocRef.get()
+                .then((doc) => {
+                    const savedPeople = doc.exists ? doc.data().people : null;
+                    people = Array.isArray(savedPeople) ? normalizePeopleNames(savedPeople) : [...defaultPeople];
+                    renderPeople();
+
+                    if (!doc.exists || JSON.stringify(savedPeople) !== JSON.stringify(people)) {
+                        savePeople();
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error loading people:", error);
+                    people = [...defaultPeople];
+                    renderPeople();
+                });
+        }
 
         function renderPeople() {
             $('#payerSelect').html(people.map(p => `<option value="${p}">${p}</option>`));
@@ -130,6 +202,7 @@
                 people.push(name);
                 $('#newPerson').val('');
                 renderPeople();
+                savePeople();
             }
         });
 
@@ -140,6 +213,7 @@
                 expenses = expenses.filter(e => e.payer !== name && !e.sharedWith.includes(name));
                 renderPeople();
                 renderExpenses();
+                savePeople();
             }
         });
 
@@ -157,6 +231,7 @@
                 }));
                 renderPeople();
                 renderExpenses();
+                savePeople();
             } else if (newName && people.includes(newName.trim())) {
                 alert("Tên đã tồn tại!");
             }
@@ -244,9 +319,8 @@
             });
         });
 
-        // Sample data
-        people = ["Đức", "Huy", "Dân", "Tú", "Châm", "Văn"];
-        renderPeople();
+        // Load saved people, falling back to sample data on first use.
+        loadPeople();
     </script>
 </body>
 
