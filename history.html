@@ -17,8 +17,27 @@
 
         <!-- Bộ lọc tháng/năm -->
         <div class="mb-4">
-            <label for="filterMonth" class="form-label">📅 Lọc theo tháng/năm:</label>
-            <input type="month" id="filterMonth" class="form-control" style="max-width: 250px;">
+            <label class="form-label">📅 Lọc theo tháng/năm:</label>
+            <div class="d-flex flex-wrap gap-2">
+                <select id="filterYear" class="form-select" style="max-width: 160px;">
+                    <option value="">Tất cả năm</option>
+                </select>
+                <select id="filterMonth" class="form-select" style="max-width: 160px;">
+                    <option value="">Tất cả tháng</option>
+                    <option value="01">Tháng 1</option>
+                    <option value="02">Tháng 2</option>
+                    <option value="03">Tháng 3</option>
+                    <option value="04">Tháng 4</option>
+                    <option value="05">Tháng 5</option>
+                    <option value="06">Tháng 6</option>
+                    <option value="07">Tháng 7</option>
+                    <option value="08">Tháng 8</option>
+                    <option value="09">Tháng 9</option>
+                    <option value="10">Tháng 10</option>
+                    <option value="11">Tháng 11</option>
+                    <option value="12">Tháng 12</option>
+                </select>
+            </div>
         </div>
 
         <div id="historyList"></div>
@@ -46,17 +65,40 @@
             return null;
         }
 
+        function populateYearFilter(snapshot) {
+            const selectedYear = $('#filterYear').val();
+            const years = new Set();
+
+            snapshot.docs.forEach(doc => {
+                const dateObj = getDateFromTimestamp(doc.data().timestamp);
+                if (dateObj) years.add(dateObj.getFullYear());
+            });
+
+            const $filterYear = $('#filterYear');
+            $filterYear.html('<option value="">Tất cả năm</option>');
+
+            [...years].sort((a, b) => b - a).forEach(year => {
+                $filterYear.append(`<option value="${year}">${year}</option>`);
+            });
+
+            if (selectedYear && years.has(Number(selectedYear))) {
+                $filterYear.val(selectedYear);
+            }
+        }
+
         // Hàm hiển thị dữ liệu
-        function renderHistory(snapshot, monthFilter) {
+        function renderHistory(snapshot, yearFilter, monthFilter) {
             $('#historyList').empty();
 
             const docs = snapshot.docs.filter(doc => {
-                if (!monthFilter) return true;
+                if (!yearFilter && !monthFilter) return true;
                 const data = doc.data();
                 const dateObj = getDateFromTimestamp(data.timestamp);
                 if (!dateObj) return false;
-                const docMonth = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
-                return docMonth === monthFilter;
+                const docYear = String(dateObj.getFullYear());
+                const docMonth = String(dateObj.getMonth() + 1).padStart(2, '0');
+
+                return (!yearFilter || docYear === yearFilter) && (!monthFilter || docMonth === monthFilter);
             });
 
             if (docs.length === 0) {
@@ -84,13 +126,14 @@
             .orderBy("timestamp", "desc")
             .onSnapshot(snapshot => {
                 latestSnapshot = snapshot;
-                renderHistory(snapshot, $('#filterMonth').val());
+                populateYearFilter(snapshot);
+                renderHistory(snapshot, $('#filterYear').val(), $('#filterMonth').val());
             });
 
         // Lắng nghe thay đổi bộ lọc
-        $('#filterMonth').on('change', function() {
+        $('#filterYear, #filterMonth').on('change', function() {
             if (latestSnapshot) {
-                renderHistory(latestSnapshot, $(this).val());
+                renderHistory(latestSnapshot, $('#filterYear').val(), $('#filterMonth').val());
             }
         });
     </script>
